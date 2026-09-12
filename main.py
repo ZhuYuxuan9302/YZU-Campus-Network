@@ -32,8 +32,9 @@ ENV_SERVICE_INDEX = "YZU_SERVICE_INDEX"
 ENV_CHECK_URL = "YZU_CHECK_URL"
 DEFAULT_SERVICE_INDEX = 1
 DEFAULT_CHECK_URL = "http://connect.rom.miui.com/generate_204"  # 小米官方连通性检测接口（返回 204 空响应）
-CHECK_TIMEOUT = 5    # 单次连通性检测的超时时间（秒）
-CHECK_INTERVAL = 10  # 外网连通性检测的时间间隔（秒）
+CHECK_TIMEOUT = 5      # 单次连通性检测的超时时间（秒）
+CHECK_INTERVAL = 10    # 外网连通性检测的时间间隔（秒）
+POST_LOGIN_GRACE = 30  # 登录成功后暂停连通性检测的时长（秒）：等待网络实际就绪，避免重复登录
 PORTAL_DETECT_URL = "http://123.123.123.123"  # 触发网关拦截以动态获取认证入口的探测地址
 USER_AGENT = "Mozilla/5.0 (X11; Linux x86_64; rv:60.0) Gecko/20100101 Firefox/60.0"
 
@@ -110,7 +111,8 @@ def parse_portal_url(portal_url: str) -> tuple[str, str]:
     return match.group(1), match.group(2)
 
 
-def login_attempt(client: httpx.Client, user_id: str, password: str, service_index: int):
+def login_attempt(client: httpx.Client, user_id: str, password: str, service_index: int) -> bool:
+    """尝试重新登录：成功返回 True，失败返回 False。"""
     try:
         portal_url = discover_portal_url(client)
         show_msg(f"已获取认证入口：{portal_url}")
@@ -139,23 +141,29 @@ def login_attempt(client: httpx.Client, user_id: str, password: str, service_ind
             show_msg("登录失败：服务器响应格式错误。可能原因：您正处于断网状态，且网关返回了非标准错误页面。", 5)
             # 打印响应文本帮助调试，如果是空字符串则打印 <EMPTY RESPONSE>
             print(f"原始响应文本: {res.text if res.text else '<EMPTY RESPONSE>'}")
-            return
+            return False
         # --- 针对断网/无效响应的修改结束 ---
 
         if res_json.get("result") == "success":
             show_msg("校园网成功连接了，Ciallo～(∠・ω< )～", 5)
+            return True
         elif res_json.get("result") == "fail":
             show_msg(f"登录失败: {res_json.get('message', '未知错误')}", 5)
+            return False
         else:
             show_msg(f"登录响应异常: {res.text}", 5)
+            return False
 
     except (httpx.ConnectTimeout, httpx.ConnectError):
         show_msg("网络连接错误：可能未联网或服务器无响应。", 5)
+        return False
     except ConnectionError as e:
         show_msg(f"流程错误: {e}", 5)
+        return False
     except Exception as e:
         print(f"发生意外错误: {e}")
         show_msg("发生意外错误，请检查控制台。", 5)
+        return False
 
 
 if __name__ == "__main__":
@@ -177,10 +185,15 @@ if __name__ == "__main__":
 
         while True:
             online, detail = check_online(client, check_url)
+
+            wait = CHECK_INTERVAL
             if online:
                 show_msg(f"外网连通正常（{detail}），无需操作。")
             else:
                 show_msg(f"检测到外网连接异常（{detail}），正在尝试重新登录...")
-                login_attempt(client, user_id, password, service_index)
+                if login_attempt(client, user_id, password, service_index):
+                    # 登录成功后外网实际可达存在延迟：暂停检测一段时间，避免重复登录
+                    show_msg(f"登录成功，暂停连通性检测 {POST_LOGIN_GRACE} 秒，等待网络实际就绪...")
+                    wait = POST_LOGIN_GRACE
 
-            time.sleep(CHECK_INTERVAL)
+            time.sleep(wait)

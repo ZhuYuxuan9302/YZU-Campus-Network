@@ -82,8 +82,8 @@
 ### 1\. 功能概述
 
   * **自动登录：** 无需手动操作，自动完成校园网认证。
-  * **断线重连：** 每隔 10 秒自动检查并尝试重新连接，确保网络持续在线。
-  * **参数内置：** 网关参数解析逻辑已内置，用户无需手动复制复杂的认证 URL。
+  * **断线重连：** 每隔 10 秒主动检测一次外网连通性（默认使用小米连通性检测接口），仅在连接异常时才尝试重新登录，确保网络持续在线。
+  * **配置外置：** 认证信息（账号、密码、服务、认证 URL）全部通过环境变量导入，无需修改源码。
   * **单文件发行：** 可通过 PyInstaller 打包成独立的可执行文件（`.exe`）。
 
 ### 2\. 环境要求
@@ -96,17 +96,48 @@
 pip install httpx
 ```
 
-#### 配置信息修改（必需）
+#### 配置环境变量（必需）
 
-在使用前，请务必打开main.py，将以下三个变量修改为您个人的真实信息：
+在使用前，请通过环境变量导入以下信息（无需修改源码）：
 
-| 变量名 | 描述 |
-| :--- | :--- |
-| **`USER_ID`** | 您的学号或用户名。 |
-| **`PASSWORD`** | 您的校园网密码。 |
-| **`SERVICE_INDEX`** | 选择的网络服务，取值为 **1 到 5** 之间的整数。 |
+| 环境变量 | 描述 | 必填 |
+| :--- | :--- | :--- |
+| **`YZU_USER_ID`** | 您的学号或用户名。 | 是 |
+| **`YZU_PASSWORD`** | 您的校园网密码。 | 是 |
+| **`YZU_INITIAL_URL`** | SSO 认证入口 URL（获取方法见下方说明）。 | 是 |
+| **`YZU_SERVICE_INDEX`** | 选择的网络服务，取值为 **1 到 5** 之间的整数，默认 `1`。 | 否 |
+| **`YZU_CHECK_URL`** | 外网连通性检测地址，默认 `http://connect.rom.miui.com/generate_204`。 | 否 |
 
-> **`SERVICE_INDEX`** 对应服务：`1: 学校互联网, 2: 联通, 3: 移动, 4: 电信, 5: 校内免费`。
+> **`YZU_SERVICE_INDEX`** 对应服务：`1: 学校互联网, 2: 联通, 3: 移动, 4: 电信, 5: 校内免费`。
+
+> **如何获取 `YZU_INITIAL_URL`：** 在浏览器中打开任意网页，等待自动跳转到校园网认证页面后，点击进入统一身份认证登录页，将此时地址栏中的完整 URL（形如 `https://sso.yzu.edu.cn/login?service=...`）复制下来即可。如更换设备或网络位置后登录失败，重新获取一次即可。
+
+> **关于 `YZU_CHECK_URL`（外网连通性检测）：** 脚本每隔 10 秒请求一次该地址来判断外网是否可达：返回 2xx 视为在线（跳过登录）；超时、连接失败或被重定向（如被认证页劫持）视为断线，才会触发重新登录。默认使用小米的连通性检测接口 `http://connect.rom.miui.com/generate_204`，它专为网络探测设计，返回 204 空响应，体积小且稳定；如需更换，任何能稳定返回 2xx 的地址均可（例如 `http://www.baidu.com`）。
+
+**Windows（PowerShell）示例：**
+
+```powershell
+# 临时设置（仅对当前窗口有效）
+$env:YZU_USER_ID = "你的学工号"
+$env:YZU_PASSWORD = "你的密码"
+$env:YZU_INITIAL_URL = "https://sso.yzu.edu.cn/login?service=..."
+$env:YZU_SERVICE_INDEX = "4"
+
+python main.py
+```
+
+*如需永久保存，可对每个变量执行一次 `[Environment]::SetEnvironmentVariable("YZU_USER_ID", "你的学工号", "User")`，重开终端后生效。*
+
+**macOS / Linux 示例：**
+
+```bash
+export YZU_USER_ID="你的学工号"
+export YZU_PASSWORD="你的密码"
+export YZU_INITIAL_URL="https://sso.yzu.edu.cn/login?service=..."
+export YZU_SERVICE_INDEX="4"
+
+python3 main.py
+```
 
 -----
 
@@ -117,7 +148,7 @@ pip install httpx
 在命令行中导航到脚本所在目录，使用 Python 解释器运行：
 
 ```bash
-python yzu_login.py
+python main.py
 ```
 
 #### 方法二：打包为独立软件 (PyInstaller)
@@ -125,17 +156,44 @@ python yzu_login.py
 1.  **安装 PyInstaller：** `pip install pyinstaller`
 2.  **执行打包命令：**
     ```bash
-    pyinstaller --onefile yzu_login.py
+    pyinstaller --onefile main.py
     ```
-    *若需隐藏命令行窗口在后台运行，请使用：`pyinstaller --onefile --noconsole yzu_login.py`*
-3.  打包完成后，在 **`dist`** 文件夹中找到生成的可执行文件（`yzu_login.exe`）运行。
+    *若需隐藏命令行窗口在后台运行，请使用：`pyinstaller --onefile --noconsole main.py`*
+3.  打包完成后，在 **`dist`** 文件夹中找到生成的可执行文件（`main.exe`）运行。
+
+#### 方法三：使用 Docker（适用于服务器 / NAS 等长期运行场景）
+
+镜像由 GitHub Actions 自动构建并发布至 GHCR，无需在本地安装 Python：
+
+```bash
+docker run -d \
+  --name yzu-campus-network \
+  --restart unless-stopped \
+  -e YZU_USER_ID="你的学工号" \
+  -e YZU_PASSWORD="你的密码" \
+  -e YZU_INITIAL_URL="https://sso.yzu.edu.cn/login?service=..." \
+  -e YZU_SERVICE_INDEX="4" \
+  ghcr.io/<owner>/<repo>:latest
+```
+
+> 提示：`<owner>` 与 `<repo>` 均为小写，分别对应 GitHub 用户名与仓库名（例如 `GUMOUXUAN/YZU-Campus-Network` → `ghcr.io/gumouxuan/yzu-campus-network`）。首次发布后，可在仓库的 **Packages** 页面将镜像可见性设为 Public。
+
+查看运行日志：
+
+```bash
+docker logs -f yzu-campus-network
+```
+
+*也可以手动构建本地镜像：`docker build -t yzu-campus-network .`*
 
 -----
 
 ### 4\. 故障排除
 
   * **`ModuleNotFoundError`：** 缺少依赖库。请运行 `pip install httpx`。
-  * **登录失败：** 请检查脚本开头配置的 **`USER_ID`** 和 **`PASSWORD`** 是否准确无误。
+  * **登录失败：** 请检查 **`YZU_USER_ID`** 和 **`YZU_PASSWORD`** 环境变量是否准确无误。
+  * **提示缺少环境变量：** 按上文「配置环境变量」一节设置对应变量后重新运行。
+  * **误判导致频繁重登：** 若连通性检测地址不可用，可能将在线状态误判为离线；可通过 `YZU_CHECK_URL` 更换为其它稳定可访问的网址。
   * **服务器响应格式错误：** 脚本在断网或半连接状态下可能无法获得标准的 JSON 响应。脚本已添加错误处理，会自动重试。
   * **其他错误：** 可以带着截图联系我，虽然我可能也解决不了
 

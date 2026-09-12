@@ -14,12 +14,13 @@ SERVICE_LIST: list = [
     "校内免费服务"
 ]
 
-# ==================== 配置信息（全部通过环境变量导入） ====================
+# ==================== 配置信息（通过环境变量导入） ====================
 # 必需环境变量：
 #   YZU_USER_ID        学工号 / 用户名
 #   YZU_PASSWORD       校园网密码
-#   YZU_INITIAL_URL    SSO 认证入口 URL（从浏览器地址栏完整复制）
-# 可选环境变量：
+# 可选环境变量（未设置时使用内置默认值）：
+#   YZU_INITIAL_URL    SSO 认证入口 URL，默认使用内置的扬州大学认证地址
+#                      （换设备 / 网络位置后如登录失败，从浏览器地址栏复制最新 URL 覆盖即可）
 #   YZU_SERVICE_INDEX  网络服务索引，取值 1-5，默认 1
 #                      1=学校互联网服务, 2=联通互联网服务, 3=移动互联网服务,
 #                      4=电信互联网服务, 5=校内免费服务
@@ -31,6 +32,8 @@ ENV_PASSWORD = "YZU_PASSWORD"
 ENV_INITIAL_URL = "YZU_INITIAL_URL"
 ENV_SERVICE_INDEX = "YZU_SERVICE_INDEX"
 ENV_CHECK_URL = "YZU_CHECK_URL"
+# 扬州大学默认认证入口（认证参数与设备 / 网络位置绑定，换环境失效后可覆盖）
+DEFAULT_INITIAL_URL = "https://sso.yzu.edu.cn/login?service=http%3A%2F%2F10.245.2.19%2Feportal%2Findex.jsp%3Fwlanuserip%3Dc1540554e2c21d6b3693fd0482f8b649%26wlanacname%3D204fb75956663440ab648612b65bef09%26ssid%3D%26nasip%3D586cbd9f283ee1edd79c04f1889b6358%26snmpagentip%3D%26mac%3Dc72cd2a5bd1273d4971ac7136c9ba92a%26t%3Dwireless-v2%26url%3Dfa95582fdeb195ec7e657f7f668b1adb%26apmac%3D%26nasid%3D204fb75956663440ab648612b65bef09%26vid%3Df270612dc42ac801%26port%3D894f1726b0f77e48%26nasportid%3Defc04e823eeb5679bfc7a150e5af1c46cf0c4832aa31a7c93df4dd744671315b9ddd87ddb2ee518a"
 DEFAULT_SERVICE_INDEX = 1
 DEFAULT_CHECK_URL = "http://connect.rom.miui.com/generate_204"  # 小米连通性检测接口（返回 204 空响应）
 CHECK_TIMEOUT = 5    # 单次连通性检测的超时时间（秒）
@@ -45,7 +48,7 @@ def load_config() -> tuple[str, str, int, str, str]:
     """从环境变量读取配置信息，缺失或非法时提示并退出。"""
     missing = [
         key
-        for key in (ENV_USER_ID, ENV_PASSWORD, ENV_INITIAL_URL)
+        for key in (ENV_USER_ID, ENV_PASSWORD)
         if not os.environ.get(key, "").strip()
     ]
     if missing:
@@ -56,7 +59,7 @@ def load_config() -> tuple[str, str, int, str, str]:
 
     user_id = os.environ[ENV_USER_ID].strip()
     password = os.environ[ENV_PASSWORD]
-    initial_url = os.environ[ENV_INITIAL_URL].strip()
+    initial_url = os.environ.get(ENV_INITIAL_URL, "").strip() or DEFAULT_INITIAL_URL
 
     if not initial_url.startswith(("http://", "https://")):
         show_msg(f"环境变量 {ENV_INITIAL_URL} 需要是以 http:// 或 https:// 开头的完整 URL。")

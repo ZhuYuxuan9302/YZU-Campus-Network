@@ -83,7 +83,7 @@
 
   * **自动登录：** 无需手动操作，自动完成校园网认证。
   * **断线重连：** 每隔 10 秒主动检测一次外网连通性（默认使用小米连通性检测接口），仅在连接异常时才尝试重新登录，确保网络持续在线。
-  * **配置外置：** 认证信息（账号、密码、服务、认证 URL）全部通过环境变量导入，无需修改源码。
+  * **配置外置：** 认证信息（账号、密码、服务、认证 URL 等）均可通过环境变量导入或覆盖，无需修改源码。
   * **单文件发行：** 可通过 PyInstaller 打包成独立的可执行文件（`.exe`）。
 
 ### 2\. 环境要求
@@ -104,13 +104,13 @@ pip install httpx
 | :--- | :--- | :--- |
 | **`YZU_USER_ID`** | 您的学号或用户名。 | 是 |
 | **`YZU_PASSWORD`** | 您的校园网密码。 | 是 |
-| **`YZU_INITIAL_URL`** | SSO 认证入口 URL（获取方法见下方说明）。 | 是 |
+| **`YZU_INITIAL_URL`** | SSO 认证入口 URL，已内置扬州大学默认地址，可覆盖（见下方说明）。 | 否 |
 | **`YZU_SERVICE_INDEX`** | 选择的网络服务，取值为 **1 到 5** 之间的整数，默认 `1`。 | 否 |
 | **`YZU_CHECK_URL`** | 外网连通性检测地址，默认 `http://connect.rom.miui.com/generate_204`。 | 否 |
 
 > **`YZU_SERVICE_INDEX`** 对应服务：`1: 学校互联网, 2: 联通, 3: 移动, 4: 电信, 5: 校内免费`。
 
-> **如何获取 `YZU_INITIAL_URL`：** 在浏览器中打开任意网页，等待自动跳转到校园网认证页面后，点击进入统一身份认证登录页，将此时地址栏中的完整 URL（形如 `https://sso.yzu.edu.cn/login?service=...`）复制下来即可。如更换设备或网络位置后登录失败，重新获取一次即可。
+> **关于 `YZU_INITIAL_URL`（认证入口）：** 已内置扬州大学默认认证地址，通常**无需设置**。若更换设备或网络位置后登录失败（认证 URL 中的加密参数与设备 / 位置绑定），可重新获取覆盖：在浏览器中打开任意网页，等待自动跳转到校园网认证页面后，点击进入统一身份认证登录页，将此时地址栏中的完整 URL（形如 `https://sso.yzu.edu.cn/login?service=...`）复制下来，通过环境变量 `YZU_INITIAL_URL` 设置即可。
 
 > **关于 `YZU_CHECK_URL`（外网连通性检测）：** 脚本每隔 10 秒请求一次该地址来判断外网是否可达：返回 2xx 视为在线（跳过登录）；超时、连接失败或被重定向（如被认证页劫持）视为断线，才会触发重新登录。默认使用小米的连通性检测接口 `http://connect.rom.miui.com/generate_204`，它专为网络探测设计，返回 204 空响应，体积小且稳定；如需更换，任何能稳定返回 2xx 的地址均可（例如 `http://www.baidu.com`）。
 
@@ -120,7 +120,6 @@ pip install httpx
 # 临时设置（仅对当前窗口有效）
 $env:YZU_USER_ID = "你的学工号"
 $env:YZU_PASSWORD = "你的密码"
-$env:YZU_INITIAL_URL = "https://sso.yzu.edu.cn/login?service=..."
 $env:YZU_SERVICE_INDEX = "4"
 
 python main.py
@@ -133,7 +132,6 @@ python main.py
 ```bash
 export YZU_USER_ID="你的学工号"
 export YZU_PASSWORD="你的密码"
-export YZU_INITIAL_URL="https://sso.yzu.edu.cn/login?service=..."
 export YZU_SERVICE_INDEX="4"
 
 python3 main.py
@@ -171,7 +169,6 @@ docker run -d \
   --restart unless-stopped \
   -e YZU_USER_ID="你的学工号" \
   -e YZU_PASSWORD="你的密码" \
-  -e YZU_INITIAL_URL="https://sso.yzu.edu.cn/login?service=..." \
   -e YZU_SERVICE_INDEX="4" \
   ghcr.io/<owner>/<repo>:latest
 ```
